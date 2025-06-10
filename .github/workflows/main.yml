@@ -89,6 +89,13 @@ jobs:
           distribution: "zulu"
           java-version: "17"
 
+      - name: Check for gradlew
+        run: |
+          if [ ! -f "android/gradlew" ]; then
+            echo "gradlew not found. Skipping Android build."
+            exit 0
+          fi
+
       - name: Give execute permission to gradlew
         run: chmod +x android/gradlew
 
@@ -98,6 +105,7 @@ jobs:
           ./gradlew assembleRelease
 
       - name: Upload APK Artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
