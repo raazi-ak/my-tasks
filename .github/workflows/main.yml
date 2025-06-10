@@ -27,6 +27,13 @@ jobs:
         run: |
           sudo gem install cocoapods
 
+      - name: Check for iOS directory
+        run: |
+          if [ ! -d "ios" ]; then
+            echo "Missing ios directory. Please make sure the iOS project is present."
+            exit 1
+          fi
+
       - name: Install Pods
         run: |
           cd ios
@@ -81,6 +88,9 @@ jobs:
         with:
           distribution: "zulu"
           java-version: "17"
+
+      - name: Give execute permission to gradlew
+        run: chmod +x android/gradlew
 
       - name: Build Android APK
         run: |
