@@ -1,4 +1,4 @@
-name: Build React Native App (iOS .app and Android .apk)
+name: Build Android APK and Upload to Release
 
 on:
   push:
@@ -6,86 +6,20 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-ios:
-    name: Build iOS .app and .ipa
-    runs-on: macos-latest
-
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Set up Node
-        uses: actions/setup-node@v3
-        with:
-          node-version: 20.18.1
-
-      - name: Install yarn & deps
-        run: |
-          npm install -g yarn
-          yarn install
-
-      - name: Install CocoaPods
-        run: |
-          sudo gem install cocoapods
-
-      - name: Generate iOS folder if missing
-        run: |
-          if [ ! -d "ios" ]; then
-            echo "Generating ios folder..."
-            npx expo prebuild --platform ios --no-install
-          fi
-
-      - name: Read app name from app.json
-        id: get-app-name
-        run: |
-          APP_NAME=$(node -p "require('./app.json').expo.name")
-          echo "Detected app name: $APP_NAME"
-          echo "APP_NAME=$APP_NAME" >> $GITHUB_ENV
-
-      - name: Install Pods
-        run: |
-          cd ios
-          pod install
-          cd ..
-
-      - name: Build .app for Device (arm64)
-        run: |
-          xcodebuild \
-            -workspace ios/${{ env.APP_NAME }}.xcworkspace \
-            -scheme ${{ env.APP_NAME }} \
-            -configuration Release \
-            -sdk iphoneos \
-            -derivedDataPath ios/build
-
-      - name: Export .app
-        run: |
-          mkdir -p ios-output/Payload
-          cp -r ios/build/Build/Products/Release-iphoneos/*.app ios-output/Payload/
-
-      - name: Zip .ipa from .app
-        run: |
-          cd ios-output
-          zip -r ${{ env.APP_NAME }}.ipa Payload
-          cd ..
-
-      - name: Upload .ipa Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-ipa
-          path: ios-output/${{ env.APP_NAME }}.ipa
-
   build-android:
     name: Build Android .apk
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
       - name: Set up Node
         uses: actions/setup-node@v3
         with:
           node-version: 20.18.1
 
-      - name: Install deps
+      - name: Install dependencies
         run: |
           npm install -g yarn
           yarn install
@@ -96,22 +30,18 @@ jobs:
           distribution: "zulu"
           java-version: "17"
 
-      - name: Check and give execute permission to gradlew
+      - name: Give gradlew execute permissions
         run: |
-          if [ -f "android/gradlew" ]; then
-            chmod +x android/gradlew
-          else
-            echo "No gradlew found, skipping Android build."
-            exit 0
-          fi
+          chmod +x android/gradlew
 
-      - name: Build Android APK
+      - name: Build APK
         run: |
           cd android
           ./gradlew assembleRelease
 
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload Release Artifact
+        uses: softprops/action-gh-release@v2
         with:
-          name: android-apk
-          path: android/app/build/outputs/apk/release/app-release.apk
+          files: android/app/build/outputs/apk/release/app-release.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
