@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-ios:
+    build-ios:
     name: Build iOS .app and .ipa
     runs-on: macos-latest
 
@@ -23,9 +23,6 @@ jobs:
           npm install -g yarn
           yarn install
 
-      - name: Install Expo CLI
-        run: npm install -g expo-cli
-
       - name: Install CocoaPods
         run: |
           sudo gem install cocoapods
@@ -37,6 +34,13 @@ jobs:
             npx expo prebuild --platform ios --no-install
           fi
 
+      - name: Read app name from app.json
+        id: get-app-name
+        run: |
+          APP_NAME=$(node -p "require('./app.json').name")
+          echo "Detected app name: $APP_NAME"
+          echo "APP_NAME=$APP_NAME" >> $GITHUB_ENV
+
       - name: Install Pods
         run: |
           cd ios
@@ -46,8 +50,8 @@ jobs:
       - name: Build .app for Device (arm64)
         run: |
           xcodebuild \
-            -workspace ios/YourApp.xcworkspace \
-            -scheme YourApp \
+            -workspace ios/${{ env.APP_NAME }}.xcworkspace \
+            -scheme ${{ env.APP_NAME }} \
             -configuration Release \
             -sdk iphoneos \
             -derivedDataPath ios/build
@@ -60,14 +64,14 @@ jobs:
       - name: Zip .ipa from .app
         run: |
           cd ios-output
-          zip -r YourApp.ipa Payload
+          zip -r ${{ env.APP_NAME }}.ipa Payload
           cd ..
 
       - name: Upload .ipa Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ios-ipa
-          path: ios-output/YourApp.ipa
+          path: ios-output/${{ env.APP_NAME }}.ipa
           
   build-android:
     name: Build Android .apk
