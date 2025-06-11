@@ -7,6 +7,7 @@ on:
 
 jobs:
   build-ios:
+    if: ${{ hashFiles('ios/**') != '' }}
     name: Build iOS .app and .ipa
     runs-on: macos-latest
 
@@ -24,15 +25,7 @@ jobs:
           yarn install
 
       - name: Install CocoaPods
-        run: |
-          sudo gem install cocoapods
-
-      - name: Check for iOS directory
-        run: |
-          if [ ! -d "ios" ]; then
-            echo "Missing ios directory. Please make sure the iOS project is present."
-            exit 1
-          fi
+        run: sudo gem install cocoapods
 
       - name: Install Pods
         run: |
@@ -65,7 +58,7 @@ jobs:
         with:
           name: ios-ipa
           path: ios-output/YourApp.ipa
-
+          
   build-android:
     name: Build Android .apk
     runs-on: ubuntu-latest
