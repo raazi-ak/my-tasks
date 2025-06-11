@@ -24,12 +24,12 @@ jobs:
         with:
           path: |
             ~/.cache/yarn
-            node_modules
+            **/node_modules
           key: yarn-${{ runner.os }}-${{ hashFiles('**/yarn.lock') }}
           restore-keys: yarn-${{ runner.os }}-
 
       - name: Install dependencies
-        run: yarn install
+        run: yarn install --frozen-lockfile
 
       - name: Set up JDK
         uses: actions/setup-java@v3
@@ -55,19 +55,24 @@ jobs:
           ./gradlew assembleRelease
 
       - name: Ensure Git Tag Exists
-        if: github.event_name == 'workflow_dispatch'
         run: |
-          LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`)
-          if [ -z "$LATEST_TAG" ]; then
-            TAG="v1.0.0"
+          git fetch --tags
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v1.0.0")
+
+          if [[ "$LATEST_TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            MAJOR="${BASH_REMATCH[1]}"
+            MINOR="${BASH_REMATCH[2]}"
+            PATCH="${BASH_REMATCH[3]}"
+            NEW_TAG="v$MAJOR.$MINOR.$((PATCH + 1))"
           else
-            TAG="v$((${LATEST_TAG/v/} + 1))"
+            NEW_TAG="v1.0.1"
           fi
-          echo "Creating and pushing tag $TAG"
+
+          echo "Tagging commit with $NEW_TAG"
           git config user.name "${{ github.actor }}"
           git config user.email "${{ github.actor }}@users.noreply.github.com"
-          git tag $TAG
-          git push origin $TAG
+          git tag -f "$NEW_TAG"
+          git push origin --force "$NEW_TAG"
 
       - name: Upload Release Artifact
         uses: softprops/action-gh-release@v2
