@@ -7,12 +7,17 @@ on:
 
 jobs:
   build-ios:
-    if: ${{ always() && hashFiles('ios/**') != '' }}  # runs only if ios/ has files
     name: Build iOS .app and .ipa
     runs-on: macos-latest
 
     steps:
       - uses: actions/checkout@v3
+
+      - name: Skip iOS build if no native folder
+        if: ${{ !contains(github.workspace, '/ios') && !exists('ios') }}
+        run: |
+          echo "No ios/ folder detected—skipping iOS build."
+          exit 0
 
       - name: Set up Node
         uses: actions/setup-node@v3
@@ -31,6 +36,7 @@ jobs:
         run: |
           cd ios
           pod install
+          cd ..
 
       - name: Build .app for Device (arm64)
         run: |
@@ -53,7 +59,7 @@ jobs:
         with:
           name: ios-ipa
           path: ios-output/YourApp.ipa
-
+          
   build-android:
     name: Build Android .apk
     runs-on: ubuntu-latest
