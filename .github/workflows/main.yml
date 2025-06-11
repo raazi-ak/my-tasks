@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-    build-ios:
+  build-ios:
     name: Build iOS .app and .ipa
     runs-on: macos-latest
 
@@ -72,7 +72,7 @@ jobs:
         with:
           name: ios-ipa
           path: ios-output/${{ env.APP_NAME }}.ipa
-          
+
   build-android:
     name: Build Android .apk
     runs-on: ubuntu-latest
