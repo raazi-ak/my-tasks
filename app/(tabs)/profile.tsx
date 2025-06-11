@@ -99,22 +99,6 @@ export default function SettingsScreen() {
 
   const styles = createStyles(theme, insets.bottom);
 
-  // Add debug function
-  const debugNotifications = async () => {
-    const notifications = await NotificationService.getInstance().getAllScheduledNotifications();
-    console.log('=== SCHEDULED NOTIFICATIONS DEBUG ===');
-    console.log(`Total scheduled: ${notifications.length}`);
-    notifications.forEach((notif, index) => {
-      console.log(`${index + 1}. ID: ${notif.identifier}`);
-      console.log(`   Title: ${notif.content.title}`);
-      console.log(`   Trigger: ${JSON.stringify(notif.trigger)}`);
-      if (notif.trigger && 'date' in notif.trigger) {
-        console.log(`   Scheduled for: ${new Date(notif.trigger.date).toLocaleString()}`);
-      }
-      console.log('---');
-    });
-  };
-
   return (
     <View style={styles.container}>
       <ModernHeader
@@ -147,27 +131,6 @@ export default function SettingsScreen() {
             </View>
           </View>
         </View>
-
-        {/* Debug Section - Only show in development */}
-        {__DEV__ && (
-          <View style={[styles.section, { backgroundColor: theme.colors.surface }]}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Debug</Text>
-            <TouchableOpacity
-              style={[styles.settingItem, { borderBottomColor: theme.colors.border }]}
-              onPress={debugNotifications}
-            >
-              <View style={styles.settingIcon}>
-                <Bell size={20} color={theme.colors.warning} />
-              </View>
-              <Text style={[styles.settingText, { color: theme.colors.text }]}>
-                Debug Notifications
-              </Text>
-              <Text style={[styles.settingSubtext, { color: theme.colors.textSecondary }]}>
-                Check console logs
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
 
         {/* Settings Groups */}
         {settingsGroups.map((group) => (

@@ -30,7 +30,8 @@ interface TaskStore {
   setNotificationsEnabled: (enabled: boolean) => void;
   scheduleTaskNotifications: (task: Task) => Promise<void>;
   cancelTaskNotifications: (taskId: string) => Promise<void>;
-  updateDailyReminders: () => Promise<void>;
+  scheduleOverdueNotifications: () => Promise<void>;
+  updateDailyReminderChecker: () => void;
   
   // Selectors
   getTasksByCategory: (category: string) => Task[];
@@ -51,9 +52,6 @@ export const useTaskStore = create<TaskStore>()(
       notificationsEnabled: true,
       
       addTask: (taskData) => {
-        const state = get();
-        const hadNoPendingTasks = state.tasks.filter(task => !task.completed).length === 0;
-        
         const newTask: Task = {
           ...taskData,
           id: Math.random().toString(36).substr(2, 9),
@@ -67,13 +65,8 @@ export const useTaskStore = create<TaskStore>()(
 
         // Schedule notifications for the new task
         if (get().notificationsEnabled) {
-          // Schedule specific task reminder (if task has reminder set)
           get().scheduleTaskNotifications(newTask);
-          
-          // Only schedule daily reminders if this is the first pending task
-          if (hadNoPendingTasks && !newTask.completed) {
-            get().updateDailyReminders();
-          }
+          get().updateDailyReminderChecker();
         }
 
         get().saveTasks();
@@ -82,7 +75,6 @@ export const useTaskStore = create<TaskStore>()(
       updateTask: (id, updates) => {
         const state = get();
         const oldTask = state.tasks.find(t => t.id === id);
-        const hadNoPendingTasks = state.tasks.filter(task => !task.completed).length === 0;
         
         set((state) => ({
           tasks: state.tasks.map((task) =>
@@ -104,15 +96,7 @@ export const useTaskStore = create<TaskStore>()(
               get().scheduleTaskNotifications(updatedTask);
             }
             
-            // Only update daily reminders if crossing the threshold
-            const newPendingCount = get().getPendingTasks().length;
-            if (hadNoPendingTasks && newPendingCount === 1) {
-              // First pending task - schedule daily reminders
-              get().updateDailyReminders();
-            } else if (!hadNoPendingTasks && newPendingCount === 0) {
-              // Last pending task completed - cancel daily reminders
-              get().updateDailyReminders();
-            }
+            get().updateDailyReminderChecker();
           }
         }
 
@@ -124,8 +108,6 @@ export const useTaskStore = create<TaskStore>()(
         const taskToDelete = state.tasks.find(task => task.id === id);
         
         if (taskToDelete) {
-          const wasLastPendingTask = state.tasks.filter(task => !task.completed).length === 1 && !taskToDelete.completed;
-          
           set((currentState) => ({
             tasks: currentState.tasks.filter((task) => task.id !== id),
             recentlyDeleted: [taskToDelete, ...currentState.recentlyDeleted.slice(0, 9)] // Keep last 10
@@ -134,11 +116,7 @@ export const useTaskStore = create<TaskStore>()(
           // Cancel notifications for deleted task
           if (state.notificationsEnabled) {
             get().cancelTaskNotifications(id);
-            
-            // Only update daily reminders if this was the last pending task
-            if (wasLastPendingTask) {
-              get().updateDailyReminders();
-            }
+            get().updateDailyReminderChecker();
           }
           
           get().saveTasks();
@@ -154,7 +132,7 @@ export const useTaskStore = create<TaskStore>()(
         // Reschedule notifications for restored task
         if (get().notificationsEnabled && !task.completed) {
           get().scheduleTaskNotifications(task);
-          get().updateDailyReminders();
+          get().updateDailyReminderChecker();
         }
 
         get().saveTasks();
@@ -190,16 +168,8 @@ export const useTaskStore = create<TaskStore>()(
             NotificationService.getInstance().sendTaskCompletedNotification(task);
             get().cancelTaskNotifications(id);
           }
-          // Only update daily reminders when task completion state changes significantly
-          // (i.e., when going from no pending tasks to having pending tasks, or vice versa)
-          const pendingTasksCount = get().getPendingTasks().length;
-          if (wasCompleted && pendingTasksCount === 1) {
-            // First pending task after all were completed - schedule daily reminders
-            get().updateDailyReminders();
-          } else if (!wasCompleted && pendingTasksCount === 0) {
-            // Last pending task was completed - cancel daily reminders
-            get().updateDailyReminders();
-          }
+          
+          get().updateDailyReminderChecker();
         }
 
         get().saveTasks();
@@ -213,14 +183,14 @@ export const useTaskStore = create<TaskStore>()(
           // Cancel all notifications when disabled
           NotificationService.getInstance().cancelAllNotifications();
         } else {
-          // Only reschedule task-specific notifications when enabled
-          // Don't automatically trigger daily reminders on toggle
+          // Reschedule task-specific notifications when enabled
           const tasks = get().tasks;
           tasks.forEach(task => {
             if (!task.completed) {
               get().scheduleTaskNotifications(task);
             }
           });
+          get().updateDailyReminderChecker();
         }
       },
 
@@ -236,25 +206,29 @@ export const useTaskStore = create<TaskStore>()(
         await notificationService.cancelTaskReminder(taskId);
       },
 
-      updateDailyReminders: async () => {
+      scheduleOverdueNotifications: async () => {
         if (!get().notificationsEnabled) return;
         
-        const pendingTasks = get().getPendingTasks();
         const overdueTasks = get().getOverdueTasks();
         const notificationService = NotificationService.getInstance();
-        
-        // Only schedule daily reminders if there are pending tasks
-        // This prevents unnecessary daily notifications when all tasks are done
-        if (pendingTasks.length > 0) {
-          await notificationService.scheduleDailyReminder();
-        } else {
-          // Cancel daily reminders if no pending tasks
-          await notificationService.cancelDailyReminder();
-        }
         
         // Schedule overdue notification if there are overdue tasks
         if (overdueTasks.length > 0) {
           await notificationService.scheduleOverdueNotification(overdueTasks);
+        }
+      },
+      
+      updateDailyReminderChecker: () => {
+        const notificationService = NotificationService.getInstance();
+        const pendingTasks = get().getPendingTasks();
+        const notificationsEnabled = get().notificationsEnabled;
+        
+        if (notificationsEnabled && pendingTasks.length > 0) {
+          // Start the time checker when there are pending tasks
+          notificationService.startDailyTimeChecker();
+        } else {
+          // Stop the time checker when no pending tasks or notifications disabled
+          notificationService.stopDailyTimeChecker();
         }
       },
       

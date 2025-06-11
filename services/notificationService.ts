@@ -4,18 +4,156 @@ import { Task } from '@/types/task';
 
 export class NotificationService {
   private static instance: NotificationService;
-  private dailyReminderIdentifiers = [
-    'daily-reminder-morning',
-    'daily-reminder-afternoon', 
-    'daily-reminder-evening',
-    'daily-reminder-night'
-  ];
+  private timeChecker: ReturnType<typeof setInterval> | null = null;
+  private lastNotificationTimes: Set<string> = new Set();
 
   static getInstance(): NotificationService {
     if (!NotificationService.instance) {
       NotificationService.instance = new NotificationService();
     }
     return NotificationService.instance;
+  }
+
+  // Start the time checker for daily reminders
+  startDailyTimeChecker(): void {
+    if (this.timeChecker) {
+      clearInterval(this.timeChecker);
+    }
+
+    // Check every minute
+    this.timeChecker = setInterval(() => {
+      this.checkTimeAndDispatch();
+    }, 60000); // 60 seconds
+
+    // Also check immediately
+    this.checkTimeAndDispatch();
+  }
+
+  // Stop the time checker
+  stopDailyTimeChecker(): void {
+    if (this.timeChecker) {
+      clearInterval(this.timeChecker);
+      this.timeChecker = null;
+    }
+    this.lastNotificationTimes.clear();
+  }
+
+  // Check current time and dispatch notifications if needed
+  private checkTimeAndDispatch(): void {
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    const timeKey = `${currentHour}:${currentMinute}`;
+
+    // Prevent duplicate notifications in the same minute
+    if (this.lastNotificationTimes.has(timeKey)) {
+      return;
+    }
+
+    // Check each time slot
+    if (currentHour === 9 && currentMinute === 0) {
+      this.dispatchMorningReminder();
+      this.lastNotificationTimes.add(timeKey);
+    } else if (currentHour === 13 && currentMinute === 0) {
+      this.dispatchAfternoonReminder();
+      this.lastNotificationTimes.add(timeKey);
+    } else if (currentHour === 18 && currentMinute === 0) {
+      this.dispatchEveningReminder();
+      this.lastNotificationTimes.add(timeKey);
+    } else if (currentHour === 22 && currentMinute === 0) {
+      this.dispatchNightReminder();
+      this.lastNotificationTimes.add(timeKey);
+    }
+
+    // Clean up old time keys (keep only last 24 hours worth)
+    if (this.lastNotificationTimes.size > 1440) { // 24 hours * 60 minutes
+      const oldestTime = Array.from(this.lastNotificationTimes)[0];
+      this.lastNotificationTimes.delete(oldestTime);
+    }
+  }
+
+  // 9 AM - Morning reminder
+  private async dispatchMorningReminder(): Promise<void> {
+    try {
+      await Notifications.scheduleNotificationAsync({
+        identifier: `morning-reminder-${Date.now()}`,
+        content: {
+          title: '🌅 Morning Check-in',
+          body: 'Good morning! Ready to tackle your pending tasks today?',
+          data: {
+            type: 'daily-reminder',
+            timeSlot: 9,
+          },
+          sound: 'notification.mp3',
+        },
+        trigger: null, // Send immediately
+      });
+    } catch (error) {
+      console.error('Error dispatching morning reminder:', error);
+    }
+  }
+
+  // 1 PM - Afternoon reminder
+  private async dispatchAfternoonReminder(): Promise<void> {
+    try {
+      await Notifications.scheduleNotificationAsync({
+        identifier: `afternoon-reminder-${Date.now()}`,
+        content: {
+          title: '☀️ Afternoon Reminder',
+          body: 'How are your tasks going? Check what\'s still pending!',
+          data: {
+            type: 'daily-reminder',
+            timeSlot: 13,
+          },
+          sound: 'notification.mp3',
+        },
+        trigger: null, // Send immediately
+      });
+    } catch (error) {
+      console.error('Error dispatching afternoon reminder:', error);
+    }
+  }
+
+  // 6 PM - Evening reminder
+  private async dispatchEveningReminder(): Promise<void> {
+    try {
+      await Notifications.scheduleNotificationAsync({
+        identifier: `evening-reminder-${Date.now()}`,
+        content: {
+          title: '🌆 Evening Review',
+          body: 'Evening check: You have pending tasks to complete!',
+          data: {
+            type: 'daily-reminder',
+            timeSlot: 18,
+          },
+          sound: 'notification.mp3',
+        },
+        trigger: null, // Send immediately
+      });
+    } catch (error) {
+      console.error('Error dispatching evening reminder:', error);
+    }
+  }
+
+  // 10 PM - Night reminder
+  private async dispatchNightReminder(): Promise<void> {
+    try {
+      await Notifications.scheduleNotificationAsync({
+        identifier: `night-reminder-${Date.now()}`,
+        content: {
+          title: '🌙 Night Planning',
+          body: 'Before you rest, remember you have tasks for tomorrow!',
+          data: {
+            type: 'daily-reminder',
+            timeSlot: 22,
+          },
+          sound: 'notification.mp3',
+        },
+        trigger: null, // Send immediately
+      });
+    } catch (error) {
+      console.error('Error dispatching night reminder:', error);
+    }
   }
 
   // Schedule notification for a specific task
@@ -68,200 +206,6 @@ export class NotificationService {
     }
   }
 
-  // Schedule daily reminders for pending tasks (4 times a day, avoiding 1-5 AM)
-  async scheduleDailyReminder(): Promise<void> {
-    try {
-      // Check if daily reminders are already scheduled
-      const existingNotifications = await this.getAllScheduledNotifications();
-      const hasExistingDailyReminders = this.dailyReminderIdentifiers.some(id => 
-        existingNotifications.some(notification => notification.identifier === id)
-      );
-
-      // If daily reminders are already scheduled, don't reschedule them
-      if (hasExistingDailyReminders) {
-        console.log('Daily reminders already scheduled, skipping...');
-        return;
-      }
-
-      // Cancel existing daily reminders first (just in case)
-      await this.cancelDailyReminder();
-
-      // Schedule each reminder separately
-      await this.scheduleMorningReminder();
-      await this.scheduleAfternoonReminder();
-      await this.scheduleEveningReminder();
-      await this.scheduleNightReminder();
-      
-      console.log('All daily reminders scheduled successfully');
-    } catch (error) {
-      console.error('Error scheduling daily reminders:', error);
-    }
-  }
-
-  // Schedule morning reminder (9 AM)
-  async scheduleMorningReminder(): Promise<void> {
-    const now = new Date();
-    const reminderTime = new Date();
-    reminderTime.setHours(9, 0, 0, 0);
-    
-    console.log(`DEBUG Morning: Current time: ${now.toLocaleString()}`);
-    console.log(`DEBUG Morning: Initial reminder time: ${reminderTime.toLocaleString()}`);
-    console.log(`DEBUG Morning: Is reminder <= now? ${reminderTime <= now}`);
-    
-    // If 9 AM has passed today, schedule for tomorrow
-    if (reminderTime <= now) {
-      reminderTime.setDate(reminderTime.getDate() + 1);
-      console.log(`DEBUG Morning: Moved to tomorrow: ${reminderTime.toLocaleString()}`);
-    }
-
-    // Double check the time is in the future
-    if (reminderTime <= now) {
-      console.error(`ERROR Morning: Reminder time is still in the past! ${reminderTime.toLocaleString()}`);
-      return;
-    }
-
-    await Notifications.scheduleNotificationAsync({
-      identifier: this.dailyReminderIdentifiers[0],
-      content: {
-        title: '🌅 Morning Check-in',
-        body: 'Good morning! Ready to tackle your pending tasks today?',
-        data: {
-          type: 'daily-reminder',
-          timeSlot: 9,
-        },
-        sound: 'notification.mp3',
-      },
-      trigger: {
-        hour: 9,
-        minute: 0,
-        repeats: true,
-      } as any,
-    });
-
-    console.log(`🌅 Morning Check-in scheduled for ${reminderTime.toLocaleString()}`);
-  }
-
-  // Schedule afternoon reminder (1 PM)
-  async scheduleAfternoonReminder(): Promise<void> {
-    const now = new Date();
-    const reminderTime = new Date();
-    reminderTime.setHours(13, 0, 0, 0);
-    
-    console.log(`DEBUG Afternoon: Current time: ${now.toLocaleString()}`);
-    console.log(`DEBUG Afternoon: Initial reminder time: ${reminderTime.toLocaleString()}`);
-    console.log(`DEBUG Afternoon: Is reminder <= now? ${reminderTime <= now}`);
-    
-    // If 1 PM has passed today, schedule for tomorrow
-    if (reminderTime <= now) {
-      reminderTime.setDate(reminderTime.getDate() + 1);
-      console.log(`DEBUG Afternoon: Moved to tomorrow: ${reminderTime.toLocaleString()}`);
-    }
-
-    // Double check the time is in the future
-    if (reminderTime <= now) {
-      console.error(`ERROR Afternoon: Reminder time is still in the past! ${reminderTime.toLocaleString()}`);
-      return;
-    }
-
-    await Notifications.scheduleNotificationAsync({
-      identifier: this.dailyReminderIdentifiers[1],
-      content: {
-        title: '☀️ Afternoon Reminder',
-        body: 'How are your tasks going? Check what\'s still pending!',
-        data: {
-          type: 'daily-reminder',
-          timeSlot: 13,
-        },
-        sound: 'notification.mp3',
-      },
-      trigger: {
-        hour: 13,
-        minute: 0,
-        repeats: true,
-      } as any,
-    });
-
-    console.log(`☀️ Afternoon Reminder scheduled for ${reminderTime.toLocaleString()}`);
-  }
-
-  // Schedule evening reminder (6 PM)
-  async scheduleEveningReminder(): Promise<void> {
-    const now = new Date();
-    const reminderTime = new Date();
-    reminderTime.setHours(18, 0, 0, 0);
-    
-    // If 6 PM has passed today, schedule for tomorrow
-    if (reminderTime <= now) {
-      reminderTime.setDate(reminderTime.getDate() + 1);
-    }
-
-    await Notifications.scheduleNotificationAsync({
-      identifier: this.dailyReminderIdentifiers[2],
-      content: {
-        title: '🌆 Evening Review',
-        body: 'Evening check: You have pending tasks to complete!',
-        data: {
-          type: 'daily-reminder',
-          timeSlot: 18,
-        },
-        sound: 'notification.mp3',
-      },
-      trigger: {
-        hour: 18,
-        minute: 0,
-        repeats: true,
-      } as any,
-    });
-
-    console.log(`🌆 Evening Review scheduled for ${reminderTime.toLocaleString()}`);
-  }
-
-  // Schedule night reminder (10 PM)
-  async scheduleNightReminder(): Promise<void> {
-    const now = new Date();
-    const reminderTime = new Date();
-    reminderTime.setHours(22, 0, 0, 0);
-    
-    // If 10 PM has passed today, schedule for tomorrow
-    if (reminderTime <= now) {
-      reminderTime.setDate(reminderTime.getDate() + 1);
-    }
-
-    await Notifications.scheduleNotificationAsync({
-      identifier: this.dailyReminderIdentifiers[3],
-      content: {
-        title: '🌙 Night Planning',
-        body: 'Before you rest, remember you have tasks for tomorrow!',
-        data: {
-          type: 'daily-reminder',
-          timeSlot: 22,
-        },
-        sound: 'notification.mp3',
-      },
-      trigger: {
-        hour: 22,
-        minute: 0,
-        repeats: true,
-      } as any,
-    });
-
-    console.log(`🌙 Night Planning scheduled for ${reminderTime.toLocaleString()}`);
-  }
-
-  // Cancel daily reminders
-  async cancelDailyReminder(): Promise<void> {
-    try {
-      for (const identifier of this.dailyReminderIdentifiers) {
-        await Notifications.cancelScheduledNotificationAsync(identifier);
-      }
-      console.log('Cancelled all daily reminders');
-    } catch (error) {
-      console.error('Error cancelling daily reminders:', error);
-    }
-  }
-
-
-
   // Schedule overdue task notification
   async scheduleOverdueNotification(overdueTasks: Task[]): Promise<void> {
     try {
@@ -306,6 +250,7 @@ export class NotificationService {
   async cancelAllNotifications(): Promise<void> {
     try {
       await Notifications.cancelAllScheduledNotificationsAsync();
+      this.stopDailyTimeChecker();
       console.log('Cancelled all notifications');
     } catch (error) {
       console.error('Error cancelling all notifications:', error);
