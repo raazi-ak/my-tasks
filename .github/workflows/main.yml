@@ -14,15 +14,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up Node
+      - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 20.18.1
 
+      - name: Cache Yarn
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/yarn
+            node_modules
+          key: yarn-${{ runner.os }}-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: yarn-${{ runner.os }}-
+
       - name: Install dependencies
-        run: |
-          npm install -g yarn
-          yarn install
+        run: yarn install
 
       - name: Set up JDK
         uses: actions/setup-java@v3
@@ -30,18 +37,43 @@ jobs:
           distribution: "zulu"
           java-version: "17"
 
-      - name: Give gradlew execute permissions
-        run: |
-          chmod +x android/gradlew
+      - name: Cache Gradle
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            android/.gradle
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Set gradlew permission
+        run: chmod +x android/gradlew
 
       - name: Build APK
         run: |
           cd android
           ./gradlew assembleRelease
 
-      - name: Upload Release Artifact
+      - name: Rename APK to Tag
+        run: cp android/app/build/outputs/apk/release/app-release.apk app-react-native.apk
+
+      - name: Create Tag if Missing
+        run: |
+          if ! git rev-parse --verify react-native >/dev/null 2>&1; then
+            echo "Creating tag react-native"
+            git config user.name "${{ github.actor }}"
+            git config user.email "${{ github.actor }}@users.noreply.github.com"
+            git tag react-native
+            git push origin react-native
+          else
+            echo "Tag react-native already exists, skipping tag creation"
+          fi
+
+      - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: android/app/build/outputs/apk/release/app-release.apk
+          tag_name: react-native
+          files: app-react-native.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
