@@ -13,13 +13,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Check for ios/ folder and skip if missing
-        run: |
-          if [ ! -d "ios" ]; then
-            echo "⚠️ ios/ directory not found — skipping iOS job."
-            exit 0
-          fi
-
       - name: Set up Node
         uses: actions/setup-node@v3
         with:
@@ -30,8 +23,19 @@ jobs:
           npm install -g yarn
           yarn install
 
+      - name: Install Expo CLI
+        run: npm install -g expo-cli
+
       - name: Install CocoaPods
-        run: sudo gem install cocoapods
+        run: |
+          sudo gem install cocoapods
+
+      - name: Generate iOS folder if missing
+        run: |
+          if [ ! -d "ios" ]; then
+            echo "Generating ios folder..."
+            npx expo prebuild --platform ios --no-install
+          fi
 
       - name: Install Pods
         run: |
@@ -48,20 +52,18 @@ jobs:
             -sdk iphoneos \
             -derivedDataPath ios/build
 
-      - name: Export and zip .app to .ipa
+      - name: Export .app
         run: |
           mkdir -p ios-output/Payload
           cp -r ios/build/Build/Products/Release-iphoneos/*.app ios-output/Payload/
+
+      - name: Zip .ipa from .app
+        run: |
           cd ios-output
           zip -r YourApp.ipa Payload
+          cd ..
 
-      - name: Upload iOS IPA Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-ipa
-          path: ios-output/YourApp.ipa
-
-      - name: Upload iOS IPA Artifact
+      - name: Upload .ipa Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ios-ipa
