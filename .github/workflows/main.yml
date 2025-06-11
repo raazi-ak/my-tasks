@@ -1,0 +1,112 @@
+name: Build React Native App (iOS .app and Android .apk)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    name: Build iOS .app and .ipa
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20.18.1
+
+      - name: Install yarn & deps
+        run: |
+          npm install -g yarn
+          yarn install
+
+      - name: Install CocoaPods
+        run: |
+          sudo gem install cocoapods
+
+      - name: Check for iOS directory
+        run: |
+          if [ ! -d "ios" ]; then
+            echo "Missing ios directory. Please make sure the iOS project is present."
+            exit 1
+          fi
+
+      - name: Install Pods
+        run: |
+          cd ios
+          pod install
+          cd ..
+
+      - name: Build .app for Device (arm64)
+        run: |
+          xcodebuild \
+            -workspace ios/YourApp.xcworkspace \
+            -scheme YourApp \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath ios/build
+
+      - name: Export .app
+        run: |
+          mkdir -p ios-output/Payload
+          cp -r ios/build/Build/Products/Release-iphoneos/*.app ios-output/Payload/
+
+      - name: Zip .ipa from .app
+        run: |
+          cd ios-output
+          zip -r YourApp.ipa Payload
+          cd ..
+
+      - name: Upload .ipa Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: ios-output/YourApp.ipa
+
+  build-android:
+    name: Build Android .apk
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20.18.1
+
+      - name: Install deps
+        run: |
+          npm install -g yarn
+          yarn install
+
+      - name: Set up JDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: "zulu"
+          java-version: "17"
+
+      - name: Check for gradlew
+        run: |
+          if [ ! -f "android/gradlew" ]; then
+            echo "gradlew not found. Skipping Android build."
+            exit 0
+          fi
+
+      - name: Give execute permission to gradlew
+        run: chmod +x android/gradlew
+
+      - name: Build Android APK
+        run: |
+          cd android
+          ./gradlew assembleRelease
+
+      - name: Upload APK Artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
