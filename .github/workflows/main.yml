@@ -24,12 +24,12 @@ jobs:
         with:
           path: |
             ~/.cache/yarn
-            **/node_modules
+            node_modules
           key: yarn-${{ runner.os }}-${{ hashFiles('**/yarn.lock') }}
           restore-keys: yarn-${{ runner.os }}-
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: yarn install
 
       - name: Set up JDK
         uses: actions/setup-java@v3
@@ -43,6 +43,7 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
+            android/.gradle
           key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: gradle-${{ runner.os }}-
 
@@ -54,29 +55,25 @@ jobs:
           cd android
           ./gradlew assembleRelease
 
-      - name: Ensure Git Tag Exists
-        run: |
-          git fetch --tags
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v1.0.0")
+      - name: Rename APK to Tag
+        run: cp android/app/build/outputs/apk/release/app-release.apk app-react-native.apk
 
-          if [[ "$LATEST_TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-            MAJOR="${BASH_REMATCH[1]}"
-            MINOR="${BASH_REMATCH[2]}"
-            PATCH="${BASH_REMATCH[3]}"
-            NEW_TAG="v$MAJOR.$MINOR.$((PATCH + 1))"
+      - name: Create Tag if Missing
+        run: |
+          if ! git rev-parse --verify react-native >/dev/null 2>&1; then
+            echo "Creating tag react-native"
+            git config user.name "${{ github.actor }}"
+            git config user.email "${{ github.actor }}@users.noreply.github.com"
+            git tag react-native
+            git push origin react-native
           else
-            NEW_TAG="v1.0.1"
+            echo "Tag react-native already exists, skipping tag creation"
           fi
 
-          echo "Tagging commit with $NEW_TAG"
-          git config user.name "${{ github.actor }}"
-          git config user.email "${{ github.actor }}@users.noreply.github.com"
-          git tag -f "$NEW_TAG"
-          git push origin --force "$NEW_TAG"
-
-      - name: Upload Release Artifact
+      - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: android/app/build/outputs/apk/release/app-release.apk
+          tag_name: react-native
+          files: app-react-native.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
