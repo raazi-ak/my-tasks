@@ -37,7 +37,7 @@ jobs:
       - name: Read app name from app.json
         id: get-app-name
         run: |
-          APP_NAME=$(node -p "require('./app.json').name")
+          APP_NAME=$(node -p "require('./app.json').expo.name")
           echo "Detected app name: $APP_NAME"
           echo "APP_NAME=$APP_NAME" >> $GITHUB_ENV
 
