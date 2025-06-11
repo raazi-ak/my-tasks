@@ -13,11 +13,12 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Skip iOS build if no native folder
-        if: ${{ !contains(github.workspace, '/ios') && !exists('ios') }}
+      - name: Check for ios/ folder and skip if missing
         run: |
-          echo "No ios/ folder detected—skipping iOS build."
-          exit 0
+          if [ ! -d "ios" ]; then
+            echo "⚠️ ios/ directory not found — skipping iOS job."
+            exit 0
+          fi
 
       - name: Set up Node
         uses: actions/setup-node@v3
@@ -47,12 +48,18 @@ jobs:
             -sdk iphoneos \
             -derivedDataPath ios/build
 
-      - name: Export .app to .ipa
+      - name: Export and zip .app to .ipa
         run: |
           mkdir -p ios-output/Payload
           cp -r ios/build/Build/Products/Release-iphoneos/*.app ios-output/Payload/
           cd ios-output
           zip -r YourApp.ipa Payload
+
+      - name: Upload iOS IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: ios-output/YourApp.ipa
 
       - name: Upload iOS IPA Artifact
         uses: actions/upload-artifact@v4
